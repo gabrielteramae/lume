@@ -1,11 +1,12 @@
 # Lume — caderno da noite
 
+![Em desenvolvimento](https://img.shields.io/badge/em%20desenvolvimento-e3a15a?style=flat)
 ![React](https://img.shields.io/badge/React-19-61DAFB?style=flat&logo=react&logoColor=black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat&logo=typescript&logoColor=white)
 ![Vite](https://img.shields.io/badge/Vite-646CFF?style=flat&logo=vite&logoColor=white)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4-38BDF8?style=flat&logo=tailwindcss&logoColor=white)
 
-Caderno noturno no navegador. O acesso abre em roxo, a tela vira ciano e o cartão sobe com o formulário. O que você escreve fica neste aparelho.
+Em desenvolvimento. Caderno noturno no navegador. O acesso abre em roxo, a tela vira ciano e o cartão sobe com o formulário. O que você escreve fica neste aparelho.
 
 | Escolha | Motivo |
 | --- | --- |
