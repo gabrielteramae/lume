@@ -1,7 +1,7 @@
-import { useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Check, Pencil, Trash2 } from "lucide-react";
+import { Check, Pencil, Trash2, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { MOODS, useLume, type Mood } from "@/lib/lume-store";
 
@@ -21,18 +21,23 @@ export function NightDesk() {
   const account = useLume((state) => state.accounts.find((item) => item.id === state.sessionId) ?? null);
   const notes = useLume((state) => state.notes);
   const signOut = useLume((state) => state.signOut);
+  const rememberMood = useLume((state) => state.rememberMood);
   const addNote = useLume((state) => state.addNote);
   const updateNote = useLume((state) => state.updateNote);
   const removeNote = useLume((state) => state.removeNote);
+  const undoRemove = useLume((state) => state.undoRemove);
+  const dismissRemoved = useLume((state) => state.dismissRemoved);
+  const mood = useLume((state) => state.lastMood);
+  const lastRemoved = useLume((state) => state.lastRemoved);
 
   const [draft, setDraft] = useState("");
-  const [mood, setMood] = useState<Mood>("calma");
   const [filter, setFilter] = useState<Mood | "todas">("todas");
   const [editing, setEditing] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState("");
-  const [armedDelete, setArmedDelete] = useState<string | null>(null);
+  const [freshId, setFreshId] = useState<string | null>(null);
+  const [tick, setTick] = useState(0);
 
-  const now = useMemo(() => new Date(), []);
+  const now = useMemo(() => new Date(), [tick]);
   const mine = notes.filter((note) => note.accountId === sessionId);
   const visible = filter === "todas" ? mine : mine.filter((note) => note.mood === filter);
   const firstName = account?.name.split(" ")[0] ?? "";
@@ -46,12 +51,30 @@ export function NightDesk() {
           ? `${account.email} · só neste aparelho`
           : "Só neste aparelho";
 
+  useEffect(() => {
+    const id = window.setInterval(() => setTick((value) => value + 1), 30000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    if (!lastRemoved) return;
+    const id = window.setTimeout(() => dismissRemoved(), 5000);
+    return () => window.clearTimeout(id);
+  }, [lastRemoved, dismissRemoved]);
+
+  function onDraftKey(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey)) return;
+    event.preventDefault();
+    event.currentTarget.form?.requestSubmit();
+  }
+
   function onSave(event: FormEvent) {
     event.preventDefault();
     if (!draft.trim()) return;
-    addNote(draft, mood);
+    const id = addNote(draft, mood);
     setDraft("");
     setFilter("todas");
+    if (id) setFreshId(id);
   }
 
   return (
@@ -71,9 +94,14 @@ export function NightDesk() {
         <p className="mt-3 text-sm text-mute">{hint}</p>
 
         <form className="mt-8 rounded-3xl bg-card p-4" onSubmit={onSave}>
-          <label htmlFor="tonight" className="text-xs text-mute">
-            Esta noite
-          </label>
+          <div className="mt-2 flex items-baseline justify-between gap-3">
+            <label htmlFor="tonight" className="text-xs text-mute">
+              Esta noite
+            </label>
+            {draft.length >= 480 ? (
+              <p className="text-xs text-mute tabular-nums">{draft.length}/600</p>
+            ) : null}
+          </div>
           <textarea
             id="tonight"
             value={draft}
@@ -81,6 +109,7 @@ export function NightDesk() {
             maxLength={600}
             placeholder="O que ficou do dia?"
             onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={onDraftKey}
             className="mt-2 w-full resize-none bg-transparent text-base text-mist outline-none placeholder:text-mute"
           />
           <div role="radiogroup" aria-label="Tom da nota" className="mt-3 grid grid-cols-4 gap-2">
@@ -96,7 +125,7 @@ export function NightDesk() {
                     "press h-11 rounded-full text-sm font-medium",
                     selected ? "bg-mint text-ink" : "bg-field text-mute",
                   )}
-                  onClick={() => setMood(item.id)}
+                  onClick={() => rememberMood(item.id)}
                 >
                   {item.label}
                 </button>
@@ -125,16 +154,12 @@ export function NightDesk() {
             <p className="mt-4 text-sm text-mute">A noite ainda está em branco. Uma linha já acende.</p>
           ) : (
             <>
-              <div className="mt-4 grid grid-cols-5 gap-2" aria-label="Filtrar por tom">
+              <div className="mt-4 flex gap-2 overflow-x-auto pb-1" aria-label="Filtrar por tom">
                 <FilterChip active={filter === "todas"} onClick={() => setFilter("todas")}>
                   Todas
                 </FilterChip>
                 {MOODS.map((item) => (
-                  <FilterChip
-                    key={item.id}
-                    active={filter === item.id}
-                    onClick={() => setFilter(item.id)}
-                  >
+                  <FilterChip key={item.id} active={filter === item.id} onClick={() => setFilter(item.id)}>
                     {item.label}
                   </FilterChip>
                 ))}
@@ -146,9 +171,11 @@ export function NightDesk() {
                   {visible.map((note) => {
                     const moodLabel = MOODS.find((item) => item.id === note.mood)?.label ?? note.mood;
                     const isEditing = editing === note.id;
-                    const armed = armedDelete === note.id;
                     return (
-                      <li key={note.id} className="rounded-3xl bg-card px-4 py-4">
+                      <li
+                        key={note.id}
+                        className={cn("rounded-3xl bg-card px-4 py-4", note.id === freshId && "lume-note")}
+                      >
                         <div className="flex items-center justify-between gap-3">
                           <p className="text-xs font-medium text-mint">{moodLabel}</p>
                           <p className="text-xs text-mute">
@@ -165,21 +192,33 @@ export function NightDesk() {
                             className="mt-3 w-full resize-none bg-transparent text-base text-mist outline-none"
                           />
                         ) : (
-                          <p className="mt-3 text-base text-mist">{note.body}</p>
+                          <p className="mt-3 text-base whitespace-pre-wrap text-mist">{note.body}</p>
                         )}
                         <div className="mt-3 flex justify-end gap-2">
                           {isEditing ? (
-                            <button
-                              type="button"
-                              className="press grid size-11 place-items-center rounded-full bg-mint text-ink"
-                              aria-label="Guardar edição"
-                              onClick={() => {
-                                updateNote(note.id, editDraft);
-                                setEditing(null);
-                              }}
-                            >
-                              <Check className="size-5" />
-                            </button>
+                            <>
+                              <button
+                                type="button"
+                                className="press grid size-11 place-items-center rounded-full bg-field text-mute"
+                                aria-label="Cancelar edição"
+                                onClick={() => setEditing(null)}
+                              >
+                                <X className="size-5" />
+                              </button>
+                              <button
+                                type="button"
+                                className="press grid size-11 place-items-center rounded-full bg-mint text-ink"
+                                aria-label="Guardar edição"
+                                disabled={!editDraft.trim()}
+                                onClick={() => {
+                                  if (!editDraft.trim()) return;
+                                  updateNote(note.id, editDraft);
+                                  setEditing(null);
+                                }}
+                              >
+                                <Check className="size-5" />
+                              </button>
+                            </>
                           ) : (
                             <button
                               type="button"
@@ -188,7 +227,6 @@ export function NightDesk() {
                               onClick={() => {
                                 setEditing(note.id);
                                 setEditDraft(note.body);
-                                setArmedDelete(null);
                               }}
                             >
                               <Pencil className="size-5" />
@@ -196,22 +234,14 @@ export function NightDesk() {
                           )}
                           <button
                             type="button"
-                            className={cn(
-                              "press grid h-11 place-items-center rounded-full bg-field px-3 text-sm text-mute",
-                              armed ? "min-w-24" : "size-11",
-                            )}
-                            aria-label={armed ? "Confirmar apagar" : "Apagar nota"}
+                            className="press grid size-11 place-items-center rounded-full bg-field text-mute"
+                            aria-label="Apagar nota"
                             onClick={() => {
-                              if (!armed) {
-                                setArmedDelete(note.id);
-                                return;
-                              }
                               removeNote(note.id);
-                              setArmedDelete(null);
                               if (editing === note.id) setEditing(null);
                             }}
                           >
-                            {armed ? "Apagar" : <Trash2 className="size-5" />}
+                            <Trash2 className="size-5" />
                           </button>
                         </div>
                       </li>
@@ -223,6 +253,19 @@ export function NightDesk() {
           )}
         </section>
       </div>
+      {lastRemoved ? (
+        <div className="pointer-events-none fixed inset-x-0 bottom-0 z-20 px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
+          <div
+            role="status"
+            className="lume-toast pointer-events-auto mx-auto flex w-full max-w-md items-center justify-between gap-3 rounded-full bg-card px-4 py-2 shadow-[0_16px_40px_rgba(0,0,0,0.35)]"
+          >
+            <p className="text-sm text-mist">Nota apagada</p>
+            <button type="button" className="press h-11 px-2 text-sm font-medium text-mint" onClick={undoRemove}>
+              Desfazer
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -241,7 +284,7 @@ function FilterChip({
       type="button"
       aria-pressed={active}
       className={cn(
-        "press h-10 w-full rounded-full px-1 text-sm font-medium",
+        "press h-10 shrink-0 rounded-full px-4 text-sm font-medium",
         active ? "bg-mint text-ink" : "bg-field text-mute",
       )}
       onClick={onClick}

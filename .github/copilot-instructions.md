@@ -40,4 +40,6 @@ Antes de concluir uma mudança de código, rode `npm run typecheck`. Se mexer em
 - Respeite `prefers-reduced-motion`. Não remova o atalho que pula a animação.
 - README no formato do repositório: selos, tabela de escolha, Stack, Estrutura, Como rodar, Testes e a linha `© 2026 Gabriel Teramae Chan`.
 - Commit em português, uma frase. Não inclua `node_modules`, `.grok`, `artifacts` nem `screenshots`.
+- A frase de abertura roda uma vez por aba (`sessionStorage`, chave `lume.intro`). Quem sai e volta cai no formulário pronto.
+- Apagar nota guarda `lastRemoved` e some sozinho. Não troque isso por um confirm que fica armado.
 - Não invente nuvem, login real do Google ou da Apple, nem e-mail de recuperação. O app está em desenvolvimento e os dados continuam no aparelho até alguém pedir o contrário.

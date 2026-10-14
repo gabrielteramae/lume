@@ -21,6 +21,18 @@ const AT: Record<Beat, number> = {
   rest: 6020,
 };
 
+function openingBeat(): Beat {
+  if (typeof window === "undefined") return "mind";
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let seen = false;
+  try {
+    seen = sessionStorage.getItem("lume.intro") === "1";
+  } catch {
+    seen = false;
+  }
+  return reduce || seen ? "rest" : "mind";
+}
+
 function reached(current: Beat, target: Beat) {
   return BEATS.indexOf(current) >= BEATS.indexOf(target);
 }
@@ -113,18 +125,16 @@ export function LoginStage() {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState("");
+  const [errorKey, setErrorKey] = useState(0);
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const [leaving, setLeaving] = useState(false);
-  const [beat, setBeat] = useState<Beat>("mind");
+  const [beat, setBeat] = useState<Beat>(openingBeat);
+  const [returned] = useState(() => openingBeat() === "rest");
   const timers = useRef<number[]>([]);
 
   useEffect(() => {
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (reduce) {
-      setBeat("rest");
-      return;
-    }
+    if (openingBeat() === "rest") return;
     timers.current = BEATS.filter((step) => step !== "mind").map((step) =>
       window.setTimeout(() => setBeat(step), AT[step]),
     );
@@ -133,9 +143,23 @@ export function LoginStage() {
     };
   }, []);
 
+  useEffect(() => {
+    if (beat !== "rest") return;
+    try {
+      sessionStorage.setItem("lume.intro", "1");
+    } catch {
+      /* a aba privada pode recusar */
+    }
+  }, [beat]);
+
   function skip() {
     for (const timer of timers.current) window.clearTimeout(timer);
     setBeat("rest");
+  }
+
+  function fail(message: string) {
+    setError(message);
+    setErrorKey((key) => key + 1);
   }
 
   function switchMode(next: Mode) {
@@ -153,7 +177,7 @@ export function LoginStage() {
       return;
     }
     setLeaving(true);
-    window.setTimeout(() => enter(id), 300);
+    window.setTimeout(() => enter(id), 440);
   }
 
   async function onSubmit(event: FormEvent) {
@@ -165,8 +189,12 @@ export function LoginStage() {
     let passed = false;
     try {
       if (mode === "create") {
+        if (password !== confirm) {
+          fail("As senhas não são iguais.");
+          return;
+        }
         const result = await register({ name, email, password });
-        if (!result.ok) setError(result.error);
+        if (!result.ok) fail(result.error);
         else {
           passed = true;
           arrive(result.id);
@@ -175,11 +203,11 @@ export function LoginStage() {
       }
       if (mode === "reset") {
         if (password !== confirm) {
-          setError("As senhas não são iguais.");
+          fail("As senhas não são iguais.");
           return;
         }
         const result = await resetPassword({ email, password });
-        if (!result.ok) setError(result.error);
+        if (!result.ok) fail(result.error);
         else {
           setPassword("");
           setConfirm("");
@@ -189,7 +217,7 @@ export function LoginStage() {
         return;
       }
       const result = await authenticate({ email, password });
-      if (!result.ok) setError(result.error);
+      if (!result.ok) fail(result.error);
       else {
         passed = true;
         arrive(result.id);
@@ -237,6 +265,7 @@ export function LoginStage() {
     <div
       className={cn(
         "login-root relative min-h-dvh",
+        returned && "is-return",
         leaving && "is-leaving",
         reached(beat, "line") && "is-line",
         reached(beat, "wash") && "is-wash",
@@ -274,7 +303,9 @@ export function LoginStage() {
           className="mt-4 text-2xl font-semibold tracking-tight text-cream"
           aria-label={showBack ? `${headline} de volta` : headline}
         >
-          <span className="login-hello">{headline}</span>
+          <span key={headline} className="login-hello">
+            {headline}
+          </span>
           {showBack ? <span className="login-back">de volta</span> : null}
         </h1>
 
@@ -288,7 +319,7 @@ export function LoginStage() {
               ) : null}
 
               {error ? (
-                <p className="lume-shake text-sm text-cream" role="alert">
+                <p key={errorKey} className="lume-shake text-sm text-cream" role="alert">
                   {error}
                 </p>
               ) : null}
@@ -348,7 +379,7 @@ export function LoginStage() {
                     onChange={setPassword}
                   />
                 </Field>
-                {mode === "reset" ? (
+                {mode === "reset" || mode === "create" ? (
                   <div className="mt-3">
                     <Field id={confirmId} label="Confirmar">
                       <SecretInput
@@ -381,7 +412,7 @@ export function LoginStage() {
                   <div className="flex items-center justify-center gap-2">
                     <button
                       type="button"
-                      className="press flex h-11 items-center justify-center gap-2 rounded-full px-4 text-sm font-medium text-mist"
+                      className="press flex h-11 items-center justify-center gap-2 rounded-full bg-field px-4 text-sm font-medium text-mist"
                       onClick={() => onSocial("google")}
                     >
                       <GoogleMark />
@@ -389,7 +420,7 @@ export function LoginStage() {
                     </button>
                     <button
                       type="button"
-                      className="press flex h-11 items-center justify-center gap-2 rounded-full px-4 text-sm font-medium text-mist"
+                      className="press flex h-11 items-center justify-center gap-2 rounded-full bg-field px-4 text-sm font-medium text-mist"
                       onClick={() => onSocial("apple")}
                     >
                       <AppleMark />

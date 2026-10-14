@@ -35,15 +35,20 @@ type LumeState = {
   accounts: Account[];
   notes: Note[];
   sessionId: string | null;
+  lastMood: Mood;
+  lastRemoved: Note | null;
   register: (input: { name: string; email: string; password: string }) => Promise<Result>;
   authenticate: (input: { email: string; password: string }) => Promise<Result>;
   authenticateSocial: (provider: "google" | "apple") => Result;
   resetPassword: (input: { email: string; password: string }) => Promise<Result>;
   enter: (id: string) => void;
   signOut: () => void;
-  addNote: (body: string, mood: Mood) => void;
+  rememberMood: (mood: Mood) => void;
+  addNote: (body: string, mood: Mood) => string | null;
   updateNote: (id: string, body: string) => void;
   removeNote: (id: string) => void;
+  undoRemove: () => void;
+  dismissRemoved: () => void;
 };
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -64,6 +69,8 @@ export const useLume = create<LumeState>()(
       accounts: [],
       notes: [],
       sessionId: null,
+      lastMood: "calma",
+      lastRemoved: null,
       async register({ name, email, password }) {
         const nextEmail = cleanEmail(email);
         const nextName = name.trim();
@@ -140,12 +147,15 @@ export const useLume = create<LumeState>()(
         set({ sessionId: id });
       },
       signOut() {
-        set({ sessionId: null });
+        set({ sessionId: null, lastRemoved: null });
+      },
+      rememberMood(mood) {
+        set({ lastMood: mood });
       },
       addNote(body, mood) {
         const accountId = get().sessionId;
         const text = body.trim().slice(0, 600);
-        if (!accountId || !text) return;
+        if (!accountId || !text) return null;
         const note: Note = {
           id: crypto.randomUUID(),
           accountId,
@@ -153,7 +163,8 @@ export const useLume = create<LumeState>()(
           mood,
           createdAt: Date.now(),
         };
-        set((state) => ({ notes: [note, ...state.notes] }));
+        set((state) => ({ notes: [note, ...state.notes], lastMood: mood, lastRemoved: null }));
+        return note.id;
       },
       updateNote(id, body) {
         const accountId = get().sessionId;
@@ -168,9 +179,26 @@ export const useLume = create<LumeState>()(
       removeNote(id) {
         const accountId = get().sessionId;
         if (!accountId) return;
+        const note = get().notes.find((item) => item.id === id && item.accountId === accountId);
+        if (!note) return;
         set((state) => ({
-          notes: state.notes.filter((note) => note.id !== id || note.accountId !== accountId),
+          lastRemoved: note,
+          notes: state.notes.filter((item) => item.id !== id),
         }));
+      },
+      undoRemove() {
+        const note = get().lastRemoved;
+        const accountId = get().sessionId;
+        if (!note || note.accountId !== accountId) return;
+        set((state) => ({
+          lastRemoved: null,
+          notes: [note, ...state.notes.filter((item) => item.id !== note.id)].sort(
+            (a, b) => b.createdAt - a.createdAt,
+          ),
+        }));
+      },
+      dismissRemoved() {
+        set({ lastRemoved: null });
       },
     }),
     {
@@ -180,6 +208,7 @@ export const useLume = create<LumeState>()(
         accounts: state.accounts,
         notes: state.notes,
         sessionId: state.sessionId,
+        lastMood: state.lastMood,
       }),
     },
   ),

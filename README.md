@@ -11,7 +11,8 @@ Em desenvolvimento. Caderno noturno no navegador. O acesso abre em roxo, a tela 
 | Escolha | Motivo |
 | --- | --- |
 | Conta só no aparelho | E-mail, senha e notas ficam no `localStorage`. Não há nuvem nem e-mail de recuperação |
-| Animação em etapas | A entrada segue um roteiro: frase, troca de cor, título e o cartão com os campos |
+| Animação em etapas | A entrada segue um roteiro: frase, troca de cor, título e o cartão com os campos. Na mesma aba, sair não repete o roteiro |
+| Nota | Apagar pode ser desfeito por alguns segundos. O tom escolhido fica para a próxima |
 
 ## Stack
 
